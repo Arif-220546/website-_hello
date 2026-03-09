@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Universal File Converter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+    body{
+      font-family:'Inter',sans-serif;
+      min-height:100vh;
+      background:linear-gradient(135deg,#0a0a1a 0%,#1a0533 50%,#0d1a33 100%);
+      display:flex;align-items:center;justify-content:center;padding:24px;color:#fff;
+    }
+
+    .card{
+      background:rgba(255,255,255,0.055);
+      backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.1);border-radius:28px;
+      padding:44px 40px;width:100%;max-width:560px;
+      box-shadow:0 40px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+    .header-icon{
+      width:52px;height:52px;border-radius:16px;
+      background:linear-gradient(135deg,#8b5cf6,#3b82f6);
+      display:flex;align-items:center;justify-content:center;font-size:24px;
+      box-shadow:0 8px 24px rgba(139,92,246,0.4);
+    }
+    h1{font-size:24px;font-weight:700;
+       background:linear-gradient(90deg,#a78bfa,#60a5fa);
+       -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    }
+    .subtitle{font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:32px;margin-top:4px}
+
+    /* ─── Drop Zone ─── */
+    .dropzone{
+      border:2px dashed rgba(139,92,246,0.4);border-radius:18px;
+      padding:32px 20px;text-align:center;cursor:pointer;
+      transition:all .25s ease;background:rgba(139,92,246,0.05);position:relative;
+    }
+    .dropzone:hover,.dropzone.drag-over{
+      border-color:#8b5cf6;background:rgba(139,92,246,0.12);transform:translateY(-2px);
+    }
+    .dropzone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    .dz-icon{font-size:38px;margin-bottom:10px}
+    .dz-label{font-size:15px;font-weight:500;color:rgba(255,255,255,0.82)}
+    .dz-label span{color:#a78bfa}
+    .dz-hint{font-size:12px;color:rgba(255,255,255,0.35);margin-top:6px}
+
+    /* ─── File Preview Badge ─── */
+    #file-badge{
+      display:none;margin-top:14px;padding:12px 16px;
+      background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);
+      border-radius:12px;display:none;align-items:center;gap:12px;
+    }
+    .badge-icon{font-size:28px;flex-shrink:0}
+    .badge-info{flex:1;min-width:0}
+    .badge-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .badge-size{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px}
+    #remove-file{
+      background:rgba(239,68,68,0.7);border:none;border-radius:8px;padding:6px 10px;
+      color:#fff;cursor:pointer;font-size:12px;transition:background .2s;flex-shrink:0;
+    }
+    #remove-file:hover{background:rgba(239,68,68,1)}
+
+    /* ─── Row of selects ─── */
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+    .field label{display:block;font-size:12px;font-weight:500;
+                 color:rgba(255,255,255,0.55);margin-bottom:8px;letter-spacing:.4px}
+
+    select,input[type="password"],input[type="text"]{
+      width:100%;background:rgba(255,255,255,0.07);
+      border:1px solid rgba(255,255,255,0.12);border-radius:12px;
+      padding:12px 14px;font-size:14px;color:#fff;outline:none;
+      transition:border-color .2s,box-shadow .2s;font-family:inherit;cursor:pointer;
+    }
+    select:focus,input[type="password"]:focus,input[type="text"]:focus{
+      border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,0.2);
+    }
+    select option{background:#1e1030;color:#fff}
+    input[type="text"]::placeholder{color:rgba(255,255,255,0.3)}
+    .ext-suffix{
+      position:absolute;right:14px;top:50%;transform:translateY(-50%);
+      font-size:13px;font-weight:600;color:rgba(139,92,246,0.85);pointer-events:none;
+    }
+    .fname-wrap{position:relative}
+
+    /* ─── Password field ─── */
+    .field{margin-top:16px}
+    .pw-wrap{position:relative}
+    .pw-wrap input{padding-right:44px}
+    #toggle-pw{
+      position:absolute;right:12px;top:50%;transform:translateY(-50%);
+      background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:16px;
+      transition:color .2s;padding:4px;
+    }
+    #toggle-pw:hover{color:rgba(255,255,255,0.9)}
+    #pw-field{margin-top:16px}
+
+    /* strength */
+    .strength-bar{height:3px;border-radius:3px;background:rgba(255,255,255,0.08);margin-top:8px;overflow:hidden}
+    .strength-fill{height:100%;width:0%;border-radius:3px;transition:width .3s,background .3s}
+    .strength-label{font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px}
+
+    /* ─── Convert Button ─── */
+    #convert-btn{
+      margin-top:26px;width:100%;padding:15px;border:none;border-radius:14px;
+      background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff;
+      font-size:15px;font-weight:600;cursor:pointer;
+      transition:opacity .2s,transform .2s,box-shadow .2s;
+      box-shadow:0 8px 24px rgba(139,92,246,0.35);font-family:inherit;letter-spacing:.3px;
+    }
+    #convert-btn:hover:not(:disabled){opacity:.9;transform:translateY(-2px);box-shadow:0 12px 32px rgba(139,92,246,0.45)}
+    #convert-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+    /* ─── Status ─── */
+    #status{
+      margin-top:14px;border-radius:12px;padding:14px 16px;font-size:13px;
+      display:none;align-items:center;gap:10px;animation:fadeIn .3s ease;
+    }
+    #status.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171}
+    #status.success{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);color:#4ade80}
+    #status.loading{background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);color:#c084fc}
+
+    /* ─── Result Card ─── */
+    #result-card{
+      display:none;margin-top:16px;
+      background:rgba(34,197,94,0.07);border:1px solid rgba(34,197,94,0.25);
+      border-radius:16px;padding:18px;animation:slideUp .35s ease;
+    }
+    .result-row{display:flex;align-items:center;gap:12px}
+    .result-icon{font-size:34px;flex-shrink:0}
+    .result-info{flex:1;min-width:0}
+    .result-title{font-size:13px;font-weight:600;color:#4ade80}
+    .result-path{font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;word-break:break-all}
+
+    .spinner{
+      display:inline-block;width:15px;height:15px;
+      border:2px solid rgba(139,92,246,0.3);border-top-color:#8b5cf6;
+      border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;
+    }
+
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+    .footer{margin-top:24px;text-align:center;font-size:11.5px;color:rgba(255,255,255,0.22)}
+    .footer span{color:rgba(139,92,246,0.7)}
+
+    .badge-shown{display:flex!important}
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="header">
+    <div class="header-icon">🔄</div>
+    <h1>Universal Converter</h1>
+  </div>
+  <p class="subtitle">Convert images, PDFs &amp; text files — saved straight to your Downloads folder.</p>
+
+  <!-- Drop Zone -->
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="file-input" accept="*/*"/>
+    <div class="dz-icon">📂</div>
+    <div class="dz-label">Drop file here or <span>browse</span></div>
+    <div class="dz-hint">Images • PDF • TXT — any size</div>
+  </div>
+
+  <!-- File Badge -->
+  <div id="file-badge">
+    <div class="badge-icon" id="badge-icon">📄</div>
+    <div class="badge-info">
+      <div class="badge-name" id="badge-name"></div>
+      <div class="badge-size" id="badge-size"></div>
+    </div>
+    <button id="remove-file">✕ Remove</button>
+  </div>
+
+  <!-- Format row -->
+  <div class="row">
+    <div class="field">
+      <label>INPUT FORMAT</label>
+      <select id="in-fmt" disabled>
+        <option value="">— detected —</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>OUTPUT FORMAT</label>
+      <select id="out-fmt">
+        <option value="pdf">PDF  🔒</option>
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+        <option value="jpeg">JPEG</option>
+        <option value="bmp">BMP</option>
+        <option value="webp">WEBP</option>
+        <option value="tiff">TIFF</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Custom filename -->
+  <div class="field" id="fname-field">
+    <label>💾 SAVE AS (filename)</label>
+    <div class="fname-wrap">
+      <input type="text" id="save-as" placeholder="e.g. my_document" maxlength="120"/>
+      <span class="ext-suffix" id="ext-suffix">.pdf</span>
+    </div>
+  </div>
+
+  <!-- Password (only shown if output = pdf) -->
+  <div id="pw-field" class="field">
+    <label>🔒 PDF PASSWORD</label>
+    <div class="pw-wrap">
+      <input type="password" id="password" placeholder="Set a password for the PDF…" autocomplete="new-password"/>
+      <button id="toggle-pw" type="button">👁️</button>
+    </div>
+    <div class="strength-bar"><div class="strength-fill" id="sf"></div></div>
+    <div class="strength-label" id="sl">Enter a password</div>
+  </div>
+
+  <!-- Convert -->
+  <button id="convert-btn" disabled>Convert &amp; Save to Downloads</button>
+
+  <!-- Status -->
+  <div id="status"></div>
+
+  <!-- Result -->
+  <div id="result-card">
+    <div class="result-row">
+      <div class="result-icon">✅</div>
+      <div class="result-info">
+        <div class="result-title" id="result-title">File saved to Downloads!</div>
+        <div class="result-path" id="result-path"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer">Files are saved directly to your system <span>Downloads</span> folder.</p>
+</div>
+
+<script>
+const fileInput   = document.getElementById('file-input');
+const dropzone    = document.getElementById('dropzone');
+const fileBadge   = document.getElementById('file-badge');
+const badgeIcon   = document.getElementById('badge-icon');
+const badgeName   = document.getElementById('badge-name');
+const badgeSize   = document.getElementById('badge-size');
+const removeFile  = document.getElementById('remove-file');
+const inFmt       = document.getElementById('in-fmt');
+const outFmt      = document.getElementById('out-fmt');
+const saveAsInput = document.getElementById('save-as');
+const extSuffix   = document.getElementById('ext-suffix');
+const pwField     = document.getElementById('pw-field');
+const pwInput     = document.getElementById('password');
+const togglePw    = document.getElementById('toggle-pw');
+const sf          = document.getElementById('sf');
+const sl          = document.getElementById('sl');
+const convertBtn  = document.getElementById('convert-btn');
+const statusEl    = document.getElementById('status');
+const resultCard  = document.getElementById('result-card');
+const resultTitle = document.getElementById('result-title');
+const resultPath  = document.getElementById('result-path');
+
+let currentFile = null;
+
+const EXT_ICON = {pdf:'📕',png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🎞️',bmp:'🖼️',webp:'🖼️',tiff:'🖼️',txt:'📝'};
+
+// Drag events
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(f) {
+  currentFile = f;
+  const ex = f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : '';
+  badgeIcon.textContent = EXT_ICON[ex] || '📄';
+  badgeName.textContent = f.name;
+  badgeSize.textContent = formatSize(f.size) + ' • .' + (ex || 'unknown');
+  fileBadge.classList.add('badge-shown');
+  inFmt.value = ex;
+  // Auto-fill filename without extension
+  const baseName = f.name.includes('.') ? f.name.slice(0, f.name.lastIndexOf('.')) : f.name;
+  saveAsInput.value = baseName;
+  // Update output format options based on input
+  updateOutputOptions(ex);
+  hideStatus(); hideResult();
+  checkReady();
+}
+
+function updateOutputOptions(ex) {
+  const imgExts = ['png','jpg','jpeg','gif','bmp','webp','tiff'];
+  const isImg = imgExts.includes(ex);
+  const isPdf = ex === 'pdf';
+  const isTxt = ex === 'txt';
+  // All options
+  const opts = [
+    {v:'pdf', l:'PDF 🔒'},
+    {v:'png', l:'PNG'},
+    {v:'jpg', l:'JPG'},
+    {v:'jpeg', l:'JPEG'},
+    {v:'bmp', l:'BMP'},
+    {v:'webp', l:'WEBP'},
+    {v:'tiff', l:'TIFF'},
+  ];
+  outFmt.innerHTML = '';
+  opts.forEach(o => {
+    // txt only supports → pdf; pdf/img support all image + pdf
+    if(isTxt && o.v !== 'pdf') return;
+    const opt = document.createElement('option');
+    opt.value = o.v; opt.textContent = o.l;
+    outFmt.appendChild(opt);
+  });
+  // default sensible output
+  if(isImg) outFmt.value = 'pdf';
+  else if(isPdf) outFmt.value = 'png';
+  else outFmt.value = 'pdf';
+  togglePwField();
+}
+
+function formatSize(bytes) {
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+removeFile.addEventListener('click', () => {
+  currentFile = null; fileInput.value = '';
+  fileBadge.classList.remove('badge-shown');
+  inFmt.value = '';
+  hideStatus(); hideResult(); checkReady();
+});
+
+// Show/hide password field & update ext suffix
+outFmt.addEventListener('change', () => { togglePwField(); updateExtSuffix(); });
+function togglePwField() {
+  const needsPw = outFmt.value === 'pdf';
+  pwField.style.display = needsPw ? 'block' : 'none';
+  checkReady();
+}
+function updateExtSuffix() {
+  extSuffix.textContent = '.' + outFmt.value;
+}
+togglePwField();
+updateExtSuffix();
+
+pwInput.addEventListener('input', () => { updateStrength(pwInput.value); checkReady(); });
+
+function updateStrength(pw) {
+  if(!pw){ sf.style.width='0%'; sl.textContent='Enter a password'; return; }
+  let s=0;
+  if(pw.length>=6)s++;if(pw.length>=10)s++;
+  if(/[A-Z]/.test(pw))s++;if(/[0-9]/.test(pw))s++;if(/[^A-Za-z0-9]/.test(pw))s++;
+  const lv=[{w:'20%',c:'#ef4444',t:'Very Weak'},{w:'40%',c:'#f97316',t:'Weak'},
+            {w:'60%',c:'#eab308',t:'Fair'},{w:'80%',c:'#22c55e',t:'Strong'},{w:'100%',c:'#10b981',t:'Very Strong'}];
+  const l=lv[Math.max(0,Math.min(s-1,4))];
+  sf.style.width=l.w; sf.style.background=l.c; sl.textContent=l.t;
+}
+
+togglePw.addEventListener('click', () => {
+  pwInput.type = pwInput.type==='password' ? 'text' : 'password';
+  togglePw.textContent = pwInput.type==='password' ? '👁️' : '🙈';
+});
+
+function checkReady() {
+  const hasPw = outFmt.value !== 'pdf' || pwInput.value.trim();
+  convertBtn.disabled = !(currentFile && hasPw);
+}
+
+function showStatus(type, msg, spinner=false){
+  statusEl.style.display='flex'; statusEl.className=type;
+  statusEl.innerHTML = spinner ? `<div class="spinner"></div><span>${msg}</span>` : `<span>${msg}</span>`;
+}
+function hideStatus(){ statusEl.style.display='none'; }
+function hideResult(){ resultCard.style.display='none'; }
+
+convertBtn.addEventListener('click', async () => {
+  if(!currentFile) return;
+  convertBtn.disabled = true;
+  hideResult(); showStatus('loading','Converting and saving to Downloads…', true);
+
+  const fd = new FormData();
+  fd.append('file', currentFile);
+  fd.append('output_format', outFmt.value);
+  fd.append('password', pwInput.value.trim());
+  fd.append('save_as', saveAsInput.value.trim() || 'converted');
+
+  try {
+    const res = await fetch('/convert', { method:'POST', body:fd });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      showStatus('error', '❌ ' + (data.error || 'Unknown error'));
+    } else {
+      hideStatus();
+      resultCard.style.display='block';
+      resultTitle.textContent = `✅ Saved: ${data.filename}`;
+      resultPath.textContent  = `📁 ${data.saved_to}`;
+    }
+  } catch(e) {
+    showStatus('error','❌ Network error. Is the Flask server running?');
+  }
+  convertBtn.disabled = false;
+  checkReady();
+});
+</script>
+</body>
+</html>
