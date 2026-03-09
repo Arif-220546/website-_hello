@@ -6,7 +6,7 @@
   <title>Universal File Converter</title>
   <meta name="description" content="Convert images and text to PDF (password-protected), or convert between image formats. Free, private — runs entirely in your browser."/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{
@@ -385,71 +385,90 @@ function convertImage(filename, outFormat){
   });
 }
 
-// ── Image/TXT → PDF (with password via pdf-lib) ───────────────────────────
+// ── Image/TXT → PDF (with password via jspdf) ───────────────────────────
 async function convertToPdf(filename, password){
-  const { PDFDocument, rgb, StandardFonts } = PDFLib;
+  const { jsPDF } = window.jspdf;
   showProgress(10,'Reading file…');
 
   const ext = getExt(currentFile.name);
-  let pdfDoc;
+  let doc;
 
   if(ext==='txt'){
     // TXT → PDF
     const text = await currentFile.text();
-    pdfDoc = await PDFDocument.create();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize=12, lineH=18, margin=50;
-    const lines = [];
-    text.split('\n').forEach(line=>{
-      // word-wrap at ~80 chars width
-      const words=line.split(' ');
-      let cur='';
-      words.forEach(w=>{
-        if((cur+' '+w).length>85){lines.push(cur.trim());cur=w;}
-        else cur+=(cur?' ':'')+w;
-      });
-      lines.push(cur.trim());
-    });
+    doc = new jsPDF();
+    doc.setFont("helvetica");
+    doc.setFontSize(12);
+    
+    const margin = 10;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
     showProgress(40,'Creating PDF…');
-    let page=null, y=0;
-    const addPage=()=>{
-      page=pdfDoc.addPage([595,842]);
-      y=842-margin;
-    };
-    addPage();
-    lines.forEach(line=>{
-      if(y<margin+lineH){addPage();}
-      page.drawText(line||' ',{x:margin,y,size:fontSize,font,color:rgb(0,0,0)});
-      y-=lineH;
+    const splitText = doc.splitTextToSize(text, pageWidth - margin * 2);
+    
+    let y = margin + 5;
+    const lineH = 6;
+    
+    splitText.forEach(line => {
+      if(y + lineH > pageHeight - margin){
+        doc.addPage();
+        y = margin + 5;
+      }
+      doc.text(line, margin, y);
+      y += lineH;
     });
   } else {
     // Image → PDF
     showProgress(30,'Embedding image…');
-    pdfDoc = await PDFDocument.create();
-    const imgBytes = await currentFile.arrayBuffer();
-    let img;
-    if(['jpg','jpeg'].includes(ext)){
-      img = await pdfDoc.embedJpg(imgBytes);
-    } else {
-      // Convert to PNG using canvas first (handles gif, bmp, webp etc.)
-      const pngBytes = await toPngBytes(currentFile);
-      img = await pdfDoc.embedPng(pngBytes);
-    }
+    // We need to measure output size first
+    const reader = new FileReader();
+    const dataUrl = await new Promise((resolve,reject)=>{
+      reader.onload=e=>resolve(e.target.result);
+      reader.onerror=reject;
+      reader.readAsDataURL(currentFile);
+    });
+    
+    const img = new Image();
+    await new Promise((resolve,reject)=>{
+      img.onload=resolve;
+      img.onerror=reject;
+      img.src=dataUrl;
+    });
+    
     showProgress(60,'Building page…');
-    const page = pdfDoc.addPage([img.width, img.height]);
-    page.drawImage(img,{x:0,y:0,width:img.width,height:img.height});
+    // Create doc matching image dimensions
+    // jsPDF uses pt by default, we use px translated to pt roughly
+    const orientation = img.width > img.height ? 'l' : 'p';
+    doc = new jsPDF({
+      orientation: orientation,
+      unit: 'px',
+      format: [img.width, img.height]
+    });
+    
+    // Default image format maps
+    let pdfImgType = 'JPEG';
+    if(ext === 'png') pdfImgType = 'PNG';
+    if(ext === 'webp') pdfImgType = 'WEBP';
+    
+    // Draw the image filling the custom page size
+    doc.addImage(dataUrl, pdfImgType, 0, 0, img.width, img.height);
   }
 
   showProgress(75,'Encrypting PDF…');
-  const pdfBytes = await pdfDoc.save({
-    userPassword: password,
-    ownerPassword: password,
-    permissions:{ printing:'highResolution', copying:false, modifying:false }
-  });
+  
+  if (password) {
+    // jsPDF built-in encryption requires setting the encryption object
+    doc.setEncryption({
+        userPassword: password,
+        ownerPassword: password,
+        userPermissions: ["print", "modify", "copy", "annot-forms"]
+    });
+  }
 
   showProgress(100,'Done!');
-  const blob = new Blob([pdfBytes],{type:'application/pdf'});
-  triggerDownload(blob,`${filename}.pdf`);
+  // jsPDF save output
+  doc.save(`${filename}.pdf`);
   showComplete(`${filename}.pdf`);
 }
 
