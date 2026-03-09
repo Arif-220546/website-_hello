@@ -395,7 +395,8 @@ async function initPyodide(){
   pyodide = await loadPyodide();
   await pyodide.loadPackage("micropip");
   const micropip = pyodide.pyimport("micropip");
-  await micropip.install("pypdf");
+  // Install cryptography because pypdf needs it for AES encryption
+  await micropip.install(["pypdf", "cryptography"]);
   return pyodide;
 }
 
