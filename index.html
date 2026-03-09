@@ -392,11 +392,18 @@ async function convertToPdf(filename, password){
 
   const ext = getExt(currentFile.name);
   let doc;
+  
+  // Prepare encryption options if password is provided
+  const encryptionOpt = password ? {
+    userPassword: password,
+    ownerPassword: password,
+    userPermissions: ["print", "modify", "copy", "annot-forms"]
+  } : undefined;
 
   if(ext==='txt'){
     // TXT → PDF
     const text = await currentFile.text();
-    doc = new jsPDF();
+    doc = new jsPDF({ encryption: encryptionOpt });
     doc.setFont("helvetica");
     doc.setFontSize(12);
     
@@ -421,7 +428,6 @@ async function convertToPdf(filename, password){
   } else {
     // Image → PDF
     showProgress(30,'Embedding image…');
-    // We need to measure output size first
     const reader = new FileReader();
     const dataUrl = await new Promise((resolve,reject)=>{
       reader.onload=e=>resolve(e.target.result);
@@ -437,36 +443,27 @@ async function convertToPdf(filename, password){
     });
     
     showProgress(60,'Building page…');
-    // Create doc matching image dimensions
-    // jsPDF uses pt by default, we use px translated to pt roughly
     const orientation = img.width > img.height ? 'l' : 'p';
-    doc = new jsPDF({
+    
+    // Create doc matching image dimensions + encryption
+    const options = {
       orientation: orientation,
       unit: 'px',
       format: [img.width, img.height]
-    });
+    };
+    if (encryptionOpt) options.encryption = encryptionOpt;
     
-    // Default image format maps
+    doc = new jsPDF(options);
+    
     let pdfImgType = 'JPEG';
     if(ext === 'png') pdfImgType = 'PNG';
     if(ext === 'webp') pdfImgType = 'WEBP';
     
-    // Draw the image filling the custom page size
     doc.addImage(dataUrl, pdfImgType, 0, 0, img.width, img.height);
   }
 
-  showProgress(75,'Encrypting PDF…');
-  
-  if (password) {
-    // jsPDF built-in encryption requires setting the encryption object
-    doc.setEncryption({
-        userPassword: password,
-        ownerPassword: password,
-        userPermissions: ["print", "modify", "copy", "annot-forms"]
-    });
-  }
+  showProgress(90,'Encrypting and Finishing PDF…');
 
-  showProgress(100,'Done!');
   // jsPDF save output
   doc.save(`${filename}.pdf`);
   showComplete(`${filename}.pdf`);
