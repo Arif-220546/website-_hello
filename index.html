@@ -7,6 +7,8 @@
   <meta name="description" content="Convert images and text to PDF (password-protected), or convert between image formats. Free, private — runs entirely in your browser."/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Pyodide for client-side Python (used for PDF encryption) -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{
@@ -385,25 +387,28 @@ function convertImage(filename, outFormat){
   });
 }
 
-// ── Image/TXT → PDF (with password via jspdf) ───────────────────────────
+// ── Image/TXT → PDF (with password via Pyodide + pypdf) ───────────────────────────
+let pyodide = null;
+async function initPyodide(){
+  if(pyodide) return pyodide;
+  showProgress(15,'Loading encryption engine (once)…');
+  pyodide = await loadPyodide();
+  await pyodide.loadPackage("micropip");
+  const micropip = pyodide.pyimport("micropip");
+  await micropip.install("pypdf");
+  return pyodide;
+}
+
 async function convertToPdf(filename, password){
   const { jsPDF } = window.jspdf;
-  showProgress(10,'Reading file…');
+  showProgress(5,'Reading file…');
 
   const ext = getExt(currentFile.name);
-  let doc;
-  
-  // Prepare encryption options if password is provided
-  const encryptionOpt = password ? {
-    userPassword: password,
-    ownerPassword: password,
-    userPermissions: ["print", "modify", "copy", "annot-forms"]
-  } : undefined;
+  let doc = new jsPDF();
 
   if(ext==='txt'){
     // TXT → PDF
     const text = await currentFile.text();
-    doc = new jsPDF({ encryption: encryptionOpt });
     doc.setFont("helvetica");
     doc.setFontSize(12);
     
@@ -411,7 +416,7 @@ async function convertToPdf(filename, password){
     const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
     
-    showProgress(40,'Creating PDF…');
+    showProgress(20,'Creating PDF…');
     const splitText = doc.splitTextToSize(text, pageWidth - margin * 2);
     
     let y = margin + 5;
@@ -427,7 +432,7 @@ async function convertToPdf(filename, password){
     });
   } else {
     // Image → PDF
-    showProgress(30,'Embedding image…');
+    showProgress(20,'Embedding image…');
     const reader = new FileReader();
     const dataUrl = await new Promise((resolve,reject)=>{
       reader.onload=e=>resolve(e.target.result);
@@ -442,18 +447,13 @@ async function convertToPdf(filename, password){
       img.src=dataUrl;
     });
     
-    showProgress(60,'Building page…');
+    showProgress(40,'Building page…');
     const orientation = img.width > img.height ? 'l' : 'p';
-    
-    // Create doc matching image dimensions + encryption
-    const options = {
+    doc = new jsPDF({
       orientation: orientation,
       unit: 'px',
       format: [img.width, img.height]
-    };
-    if (encryptionOpt) options.encryption = encryptionOpt;
-    
-    doc = new jsPDF(options);
+    });
     
     let pdfImgType = 'JPEG';
     if(ext === 'png') pdfImgType = 'PNG';
@@ -462,10 +462,47 @@ async function convertToPdf(filename, password){
     doc.addImage(dataUrl, pdfImgType, 0, 0, img.width, img.height);
   }
 
-  showProgress(90,'Encrypting and Finishing PDF…');
+  showProgress(60,'Finalizing PDF…');
+  let finalPdfBytes = doc.output('arraybuffer');
 
-  // jsPDF save output
-  doc.save(`${filename}.pdf`);
+  if (password) {
+    showProgress(70,'Initializing encryption…');
+    try {
+      await initPyodide();
+      showProgress(85,'Encrypting (AES-128)…');
+      
+      // Pass the unencrypted PDF arraybuffer to python
+      pyodide.globals.set("pdf_bytes", new Uint8Array(finalPdfBytes));
+      pyodide.globals.set("pdf_password", password);
+      
+      // Run pypdf purely in the browser via Pyodide
+      await pyodide.runPythonAsync(`
+        import io
+        from pypdf import PdfReader, PdfWriter
+        
+        reader = PdfReader(io.BytesIO(bytes(pdf_bytes)))
+        writer = PdfWriter()
+        writer.append_pages_from_reader(reader)
+        writer.encrypt(pdf_password, algorithm="AES-128")
+        
+        out_stream = io.BytesIO()
+        writer.write(out_stream)
+        out_bytes = out_stream.getvalue()
+      `);
+      
+      const encryptedBytes = pyodide.globals.get("out_bytes").toJs();
+      finalPdfBytes = encryptedBytes;
+      
+    } catch (err) {
+      console.error(err);
+      throw new Error("Encryption failed: " + err.message);
+    }
+  }
+
+  showProgress(100,'Done!');
+  // Save output
+  const blob = new Blob([finalPdfBytes], {type:'application/pdf'});
+  triggerDownload(blob, `${filename}.pdf`);
   showComplete(`${filename}.pdf`);
 }
 
