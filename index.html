@@ -395,8 +395,8 @@ async function initPyodide(){
   pyodide = await loadPyodide();
   await pyodide.loadPackage("micropip");
   const micropip = pyodide.pyimport("micropip");
-  // Install cryptography because pypdf needs it for AES encryption
-  await micropip.install(["pypdf", "cryptography"]);
+  // Install pure python dependencies (no native C-extensions like cryptography needed for RC4)
+  await micropip.install(["pypdf"]);
   return pyodide;
 }
 
@@ -470,13 +470,14 @@ async function convertToPdf(filename, password){
     showProgress(70,'Initializing encryption…');
     try {
       await initPyodide();
-      showProgress(85,'Encrypting (AES-128)…');
+      showProgress(85,'Encrypting (RC4-128)…');
       
       // Pass the unencrypted PDF arraybuffer to python
       pyodide.globals.set("pdf_bytes", new Uint8Array(finalPdfBytes));
       pyodide.globals.set("pdf_password", password);
       
       // Run pypdf purely in the browser via Pyodide
+      // Using RC4-128 avoids the need for the heavy cryptography C-library
       await pyodide.runPythonAsync(`
         import io
         from pypdf import PdfReader, PdfWriter
@@ -484,7 +485,7 @@ async function convertToPdf(filename, password){
         reader = PdfReader(io.BytesIO(bytes(pdf_bytes)))
         writer = PdfWriter()
         writer.append_pages_from_reader(reader)
-        writer.encrypt(pdf_password, algorithm="AES-128")
+        writer.encrypt(pdf_password, algorithm="RC4-128")
         
         out_stream = io.BytesIO()
         writer.write(out_stream)
